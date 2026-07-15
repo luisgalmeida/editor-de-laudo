@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Editor de OS/Orçamento — Biodron</title>
+<style>
+  :root{
+    --navy:#1a3c78;
+    --navy-dark:#132c59;
+    --gray:#f4f5f7;
+    --border:#dcdfe4;
+    --text:#222;
+  }
+  *{box-sizing:border-box;}
+  body{
+    font-family: Arial, Helvetica, sans-serif;
+    background:#eef0f3;
+    margin:0; padding:24px;
+    color:var(--text);
+  }
+  .container{
+    max-width:960px; margin:0 auto;
+    background:#fff; border-radius:10px;
+    padding:28px 32px; box-shadow:0 2px 10px rgba(0,0,0,.08);
+  }
+  h1{font-size:20px; color:var(--navy-dark); margin-top:0;}
+  h2{font-size:15px; color:var(--navy-dark); border-bottom:2px solid var(--navy); padding-bottom:6px; margin-top:28px;}
+  .upload-box{
+    border:2px dashed var(--border); border-radius:8px; padding:24px;
+    text-align:center; margin-bottom:16px;
+  }
+  #status{font-size:13px; color:#555; margin:8px 0 16px;}
+  #status.error{color:#b3261e; font-weight:bold;}
+  #status.ok{color:#1a7d3e; font-weight:bold;}
+  .meta-grid{
+    display:grid; grid-template-columns:1fr 1fr; gap:12px 20px;
+    margin-bottom:8px;
+  }
+  .meta-grid label{
+    display:flex; flex-direction:column; font-size:12px; font-weight:bold; color:#444; gap:4px;
+  }
+  .meta-grid input{
+    font-size:13px; padding:6px 8px; border:1px solid var(--border); border-radius:5px;
+  }
+  table{width:100%; border-collapse:collapse; margin-top:8px; font-size:13px;}
+  thead th{
+    background:var(--navy); color:#fff; text-align:left;
+    padding:8px 6px; font-size:12px;
+  }
+  tbody td{padding:5px 6px; border-bottom:1px solid var(--border); vertical-align:middle;}
+  tbody tr:nth-child(even){background:var(--gray);}
+  td input{width:100%; padding:5px 6px; border:1px solid var(--border); border-radius:4px; font-size:13px;}
+  td.qtd input, td.val input{text-align:right;}
+  td.total-cell{font-weight:bold; text-align:right; white-space:nowrap;}
+  .rm-btn{
+    background:#e8544a; color:#fff; border:none; border-radius:4px;
+    width:24px; height:24px; cursor:pointer; font-size:14px; line-height:1;
+  }
+  .add-btn{
+    margin-top:8px; background:var(--navy); color:#fff; border:none;
+    padding:7px 14px; border-radius:5px; cursor:pointer; font-size:13px;
+  }
+  .add-btn:hover{background:var(--navy-dark);}
+  .subtotal-row td{font-weight:bold; background:#eef2f8; text-align:right;}
+  #grandTotalBox{
+    margin-top:20px; padding:14px 18px; background:var(--navy);
+    color:#fff; border-radius:8px; display:flex; justify-content:space-between;
+    align-items:center; font-size:16px; font-weight:bold;
+  }
+  #generateBtn{
+    margin-top:22px; background:#1a7d3e; color:#fff; border:none;
+    padding:12px 22px; border-radius:6px; font-size:15px; cursor:pointer; width:100%;
+  }
+  #generateBtn:disabled{background:#9aa; cursor:not-allowed;}
+  #generateBtn:hover:not(:disabled){background:#136030;}
+  .thumb-box{display:flex; gap:16px; align-items:flex-start; margin-bottom:10px;}
+  #pageThumb{border:1px solid var(--border); max-width:160px; display:none;}
+  .hint{font-size:12px; color:#777; margin-top:4px;}
+  .section-empty{font-size:12px; color:#999; font-style:italic; margin-top:6px;}
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Editor de Ordem de Serviço / Orçamento — Biodron</h1>
+  <p class="hint">Envie o PDF do laudo. O sistema localiza automaticamente a página "ORDEM DE SERVIÇO / ORÇAMENTO", deixa você editar os valores e peças/serviços, recalcula os totais e gera um novo PDF — as demais páginas do laudo permanecem exatamente iguais.</p>
+
+  <div class="upload-box">
+    <input type="file" id="fileInput" accept="application/pdf">
+  </div>
+  <div id="status"></div>
+
+  <div id="editorArea" style="display:none">
+    <div class="thumb-box">
+      <div>
+        <div class="hint">Página identificada:</div>
+        <canvas id="pageThumb"></canvas>
+      </div>
+      <div class="meta-grid" style="flex:1">
+        <label>OS Nº (opcional)
+          <input id="osNum" placeholder="deixe em branco se não houver">
+        </label>
+        <label>Cliente
+          <input id="cliente">
+        </label>
+        <label>Pagamento
+          <input id="pagamento">
+        </label>
+        <label>Categoria
+          <input id="categoria">
+        </label>
+      </div>
+    </div>
+
+    <h2>Serviços</h2>
+    <table id="servicosTable">
+      <thead><tr><th style="width:50%">Descrição</th><th>Qtd</th><th>Valor Unit. (R$)</th><th>Total</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <div id="servicosEmpty" class="section-empty" style="display:none">Nenhum serviço cadastrado.</div>
+    <button class="add-btn" id="addServico">+ Adicionar serviço</button>
+
+    <h2>Peças</h2>
+    <table id="pecasTable">
+      <thead><tr><th style="width:50%">Descrição</th><th>Qtd</th><th>Valor Unit. (R$)</th><th>Total</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <div id="pecasEmpty" class="section-empty" style="display:none">Nenhuma peça cadastrada.</div>
+    <button class="add-btn" id="addPeca">+ Adicionar peça</button>
+
+    <div id="grandTotalBox">
+      <span>TOTAL GERAL</span>
+      <span id="grandTotalValue">R$ 0,00</span>
+    </div>
+
+    <button id="generateBtn">Gerar novo PDF com as alterações</button>
+    <p class="hint">O download começa automaticamente ao clicar. Nenhum dado é enviado para servidor algum — tudo acontece no seu navegador.</p>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+let originalBytes = null;
+let totalPageCount = 0;
+let targetPageIndex = -1; // 0-based
+let meta = { osNum:'', cliente:'', pagamento:'', categoria:'' };
+let rows = { servicos: [], pecas: [] };
+
+const statusEl = document.getElementById('status');
+const editorArea = document.getElementById('editorArea');
+
+function setStatus(msg, cls){
+  statusEl.textContent = msg;
+  statusEl.className = cls || '';
+}
+
+function parseBRL(str){
+  if(!str) return 0;
+  const cleaned = str.replace(/\./g,'').replace(',', '.').replace(/[^\d.\-]/g,'');
+  const n = parseFloat(cleaned);
+  return isNaN(n) ? 0 : n;
+}
+
+function formatBRL(n){
+  return (n||0).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
+}
+
+// ---------- Reconstruir linhas de texto a partir dos itens do pdf.js ----------
+function buildLines(items){
+  const pts = items
+    .filter(it => it.str !== undefined)
+    .map(it => ({ str: it.str, x: it.transform[4], y: it.transform[5], width: it.width || 0 }));
+
+  pts.sort((a,b) => (b.y - a.y) || (a.x - b.x));
+
+  const clusters = [];
+  let current = null;
+  for(const p of pts){
+    if(current && Math.abs(p.y - current.y) < 3){
+      current.items.push(p);
+    } else {
+      if(current) clusters.push(current);
+      current = { y: p.y, items:[p] };
+    }
+  }
+  if(current) clusters.push(current);
+
+  return clusters.map(c => {
+    c.items.sort((a,b) => a.x - b.x);
+    let line = '';
+    let prevEndX = null;
+    for(const it of c.items){
+      if(prevEndX !== null && (it.x - prevEndX) > 1.5){
+        line += ' ';
+      }
+      line += it.str;
+      prevEndX = it.x + it.width;
+    }
+    return line.replace(/\s+/g,' ').trim();
+  }).filter(l => l.length > 0);
+}
+
+// ---------- Parsing da página de OS/Orçamento ----------
+function parseOsPage(lines){
+  meta = { osNum:'', cliente:'', pagamento:'', categoria:'' };
+  rows = { servicos: [], pecas: [] };
+
+  let currentSection = null;
+
+  const reOs = /^OS\s*N[ºo°]?\s*:\s*(.+)$/i;
+  const reCliente = /^Cliente:\s*(.+)$/i;
+  const rePagamento = /^Pagamento:\s*(.+)$/i;
+  const reCategoria = /^Categoria:\s*(.+)$/i;
+  const reHeaderServ = /^Serviços\s+Qtd\s+Valor\s+Unit\.?\s+Total$/i;
+  const reHeaderPeca = /^Pe[çc]as\s+Qtd\s+Valor\s+Unit\.?\s+Total$/i;
+  const reTotalGeral = /^TOTAL GERAL\s+R\$/i;
+  const reDataRow = /^(.+?)\s+(\d+)\s+R\$\s*([\d.,]+)\s+R\$\s*([\d.,]+)$/;
+
+  for(const line of lines){
+    if(reOs.test(line)){ meta.osNum = line.match(reOs)[1].trim(); continue; }
+    if(reCliente.test(line)){ meta.cliente = line.match(reCliente)[1].trim(); continue; }
+    if(rePagamento.test(line)){ meta.pagamento = line.match(rePagamento)[1].trim(); continue; }
+    if(reCategoria.test(line)){ meta.categoria = line.match(reCategoria)[1].trim(); continue; }
+    if(reHeaderServ.test(line)){ currentSection = 'servicos'; continue; }
+    if(reHeaderPeca.test(line)){ currentSection = 'pecas'; continue; }
+    if(reTotalGeral.test(line)){ currentSection = null; continue; }
+    if(/^Documento gerado automaticamente/i.test(line)) continue;
+    if(/^ORDEM DE SERVI/i.test(line)) continue;
+
+    const m = line.match(reDataRow);
+    if(m && currentSection){
+      rows[currentSection].push({
+        desc: m[1].trim(),
+        qtd: parseFloat(m[2]) || 0,
+        valorUnit: parseBRL(m[3])
+      });
+    }
+  }
+}
+
+// ---------- Carregar PDF ----------
+document.getElementById('fileInput').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if(!file) return;
+  editorArea.style.display = 'none';
+  setStatus('Lendo o PDF...');
+
+  try{
+    const buf = await file.arrayBuffer();
+    originalBytes = buf.slice(0);
+
+    const loadingTask = pdfjsLib.getDocument({ data: buf });
+    const pdf = await loadingTask.promise;
+    totalPageCount = pdf.numPages;
+
+    let found = false;
+    for(let i = pdf.numPages; i >= 1; i--){
+      const page = await pdf.getPage(i);
+      const textContent = await page.getTextContent();
+      const lines = buildLines(textContent.items);
+      const hasHeader = lines.some(l => /ORDEM DE SERVI[ÇC]O/i.test(l));
+      if(hasHeader){
+        targetPageIndex = i - 1;
+        parseOsPage(lines);
+        await renderThumb(page);
+        found = true;
+        break;
+      }
+    }
+
+    if(!found){
+      setStatus('Não encontrei uma página "ORDEM DE SERVIÇO / ORÇAMENTO" neste PDF. Verifique se é o laudo correto.', 'error');
+      return;
+    }
+
+    populateForm();
+    editorArea.style.display = 'block';
+    setStatus(`Página ${targetPageIndex+1} de ${totalPageCount} identificada como Ordem de Serviço/Orçamento. Confira e edite abaixo.`, 'ok');
+  } catch(err){
+    console.error(err);
+    setStatus('Erro ao processar o PDF: ' + err.message, 'error');
+  }
+});
+
+async function renderThumb(page){
+  const viewport = page.getViewport({ scale: 0.35 });
+  const canvas = document.getElementById('pageThumb');
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  canvas.style.display = 'block';
+  const ctx = canvas.getContext('2d');
+  await page.render({ canvasContext: ctx, viewport }).promise;
+}
+
+// ---------- Formulário ----------
+function populateForm(){
+  document.getElementById('osNum').value = meta.osNum;
+  document.getElementById('cliente').value = meta.cliente;
+  document.getElementById('pagamento').value = meta.pagamento;
+  document.getElementById('categoria').value = meta.categoria;
+  renderTable('servicos');
+  renderTable('pecas');
+  updateGrandTotal();
+}
+
+function renderTable(section){
+  const tbody = document.querySelector(`#${section === 'servicos' ? 'servicosTable' : 'pecasTable'} tbody`);
+  const emptyEl = document.getElementById(section === 'servicos' ? 'servicosEmpty' : 'pecasEmpty');
+  tbody.innerHTML = '';
+  const list = rows[section];
+  emptyEl.style.display = list.length ? 'none' : 'block';
+
+  list.forEach((row, idx) => {
+    const tr = document.createElement('tr');
+    const total = (row.qtd || 0) * (row.valorUnit || 0);
+    tr.innerHTML = `
+      <td><input type="text" data-section="${section}" data-idx="${idx}" data-field="desc" value="${escapeHtml(row.desc)}"></td>
+      <td class="qtd"><input type="number" min="0" step="1" data-section="${section}" data-idx="${idx}" data-field="qtd" value="${row.qtd}"></td>
+      <td class="val"><input type="number" min="0" step="0.01" data-section="${section}" data-idx="${idx}" data-field="valorUnit" value="${row.valorUnit.toFixed(2)}"></td>
+      <td class="total-cell">R$ ${formatBRL(total)}</td>
+      <td><button class="rm-btn" data-section="${section}" data-idx="${idx}" title="Remover linha">×</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function escapeHtml(s){
+  return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+document.addEventListener('input', (e) => {
+  const t = e.target;
+  if(t.dataset && t.dataset.section && t.dataset.field){
+    const section = t.dataset.section, idx = parseInt(t.dataset.idx,10), field = t.dataset.field;
+    if(field === 'qtd' || field === 'valorUnit'){
+      rows[section][idx][field] = parseFloat(t.value) || 0;
+    } else {
+      rows[section][idx][field] = t.value;
+    }
+    if(field === 'qtd' || field === 'valorUnit'){
+      renderTable(section);
+      updateGrandTotal();
+    } else {
+      updateGrandTotal();
+    }
+  }
+});
+
+document.addEventListener('click', (e) => {
+  if(e.target.classList.contains('rm-btn')){
+    const section = e.target.dataset.section, idx = parseInt(e.target.dataset.idx,10);
+    rows[section].splice(idx,1);
+    renderTable(section);
+    updateGrandTotal();
+  }
+});
+
+document.getElementById('addServico').addEventListener('click', () => {
+  rows.servicos.push({ desc:'', qtd:1, valorUnit:0 });
+  renderTable('servicos');
+  updateGrandTotal();
+});
+document.getElementById('addPeca').addEventListener('click', () => {
+  rows.pecas.push({ desc:'', qtd:1, valorUnit:0 });
+  renderTable('pecas');
+  updateGrandTotal();
+});
+
+function sectionTotal(section){
+  return rows[section].reduce((sum,r) => sum + (r.qtd||0)*(r.valorUnit||0), 0);
+}
+
+function updateGrandTotal(){
+  const total = sectionTotal('servicos') + sectionTotal('pecas');
+  document.getElementById('grandTotalValue').textContent = 'R$ ' + formatBRL(total);
+}
+
+// ---------- Geração do novo PDF ----------
+function wrapText(text, font, size, maxWidth){
+  const words = (text || '').split(' ');
+  const lines = [];
+  let line = '';
+  for(const w of words){
+    const test = line ? line + ' ' + w : w;
+    if(font.widthOfTextAtSize(test, size) > maxWidth && line){
+      lines.push(line);
+      line = w;
+    } else {
+      line = test;
+    }
+  }
+  if(line) lines.push(line);
+  return lines.length ? lines : [''];
+}
+
+document.getElementById('generateBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('generateBtn');
+  btn.disabled = true;
+  btn.textContent = 'Gerando...';
+  try {
+    await generatePdf();
+  } catch(err){
+    console.error(err);
+    alert('Erro ao gerar o PDF: ' + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Gerar novo PDF com as alterações';
+  }
+});
+
+async function generatePdf(){
+  const { PDFDocument, StandardFonts, rgb } = PDFLib;
+
+  meta.osNum = document.getElementById('osNum').value.trim();
+  meta.cliente = document.getElementById('cliente').value.trim();
+  meta.pagamento = document.getElementById('pagamento').value.trim();
+  meta.categoria = document.getElementById('categoria').value.trim();
+
+  const pdfDoc = await PDFDocument.load(originalBytes);
+  const pages = pdfDoc.getPages();
+  const oldPage = pages[targetPageIndex];
+  const { width, height } = oldPage.getSize();
+
+  pdfDoc.removePage(targetPageIndex);
+  const page = pdfDoc.insertPage(targetPageIndex, [width, height]);
+
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+  const navy = rgb(0.102, 0.235, 0.470);
+  const lightGray = rgb(0.95, 0.96, 0.98);
+  const black = rgb(0.13, 0.13, 0.13);
+  const white = rgb(1,1,1);
+  const gray = rgb(0.45, 0.45, 0.45);
+
+  const marginX = 50;
+  let y = height - 55;
+
+  // Título
+  page.drawRectangle({ x:0, y: y-6, width: width, height: 28, color: navy });
+  page.drawText('ORDEM DE SERVIÇO / ORÇAMENTO', { x: marginX, y: y+2, size: 13, font: fontBold, color: white });
+  y -= 44;
+
+  // Meta info
+  const metaLines = [];
+  if(meta.osNum) metaLines.push(['OS Nº:', meta.osNum]);
+  if(meta.cliente) metaLines.push(['Cliente:', meta.cliente]);
+  if(meta.pagamento) metaLines.push(['Pagamento:', meta.pagamento]);
+  if(meta.categoria) metaLines.push(['Categoria:', meta.categoria]);
+
+  for(const [label, val] of metaLines){
+    page.drawText(label, { x: marginX, y, size: 10, font: fontBold, color: black });
+    const wrapped = wrapText(val, font, 10, width - 2*marginX - 75);
+    wrapped.forEach((line, i) => {
+      page.drawText(line, { x: marginX + 72, y: y - i*13, size: 10, font, color: black });
+    });
+    y -= Math.max(16, wrapped.length*13 + 3);
+  }
+  y -= 12;
+
+  const tableWidth = width - 2*marginX;
+  const colDesc = marginX + 4;
+  const colQtd = marginX + tableWidth*0.56;
+  const colVal = marginX + tableWidth*0.68;
+  const colTot = marginX + tableWidth*0.85;
+
+  function drawSection(title, list){
+    if(list.length === 0) return 0;
+
+    page.drawRectangle({ x: marginX, y: y-16, width: tableWidth, height: 18, color: navy });
+    page.drawText(title, { x: colDesc, y: y-12, size: 9, font: fontBold, color: white });
+    page.drawText('Qtd', { x: colQtd, y: y-12, size: 9, font: fontBold, color: white });
+    page.drawText('Valor Unit.', { x: colVal, y: y-12, size: 9, font: fontBold, color: white });
+    page.drawText('Total', { x: colTot, y: y-12, size: 9, font: fontBold, color: white });
+    y -= 22;
+
+    let subtotal = 0;
+    let alt = false;
+    const descMaxWidth = colQtd - colDesc - 8;
+
+    for(const r of list){
+      const qtd = r.qtd || 0;
+      const valorUnit = r.valorUnit || 0;
+      const rowTotal = qtd * valorUnit;
+      subtotal += rowTotal;
+
+      const wrapped = wrapText(r.desc, font, 9, descMaxWidth);
+      const rowHeight = Math.max(15, wrapped.length*11 + 5);
+
+      if(alt){
+        page.drawRectangle({ x: marginX, y: y - rowHeight + 4, width: tableWidth, height: rowHeight, color: lightGray });
+      }
+
+      wrapped.forEach((line, i) => {
+        page.drawText(line, { x: colDesc, y: y - 10 - i*11, size: 9, font, color: black });
+      });
+      page.drawText(String(qtd), { x: colQtd, y: y - 10, size: 9, font, color: black });
+      page.drawText('R$ ' + formatBRL(valorUnit), { x: colVal, y: y - 10, size: 9, font, color: black });
+      page.drawText('R$ ' + formatBRL(rowTotal), { x: colTot, y: y - 10, size: 9, font, color: black });
+
+      y -= rowHeight;
+      alt = !alt;
+    }
+    y -= 8;
+    return subtotal;
+  }
+
+  const subServ = drawSection('Serviços', rows.servicos);
+  const subPecas = drawSection('Peças', rows.pecas);
+  const grandTotal = subServ + subPecas;
+
+  y -= 4;
+  page.drawLine({ start:{x:marginX, y: y+10}, end:{x:width-marginX, y:y+10}, thickness:1, color: navy });
+  y -= 8;
+  page.drawText('TOTAL GERAL', { x: marginX, y, size: 11, font: fontBold, color: black });
+  const totalStr = 'R$ ' + formatBRL(grandTotal);
+  const totalWidth = fontBold.widthOfTextAtSize(totalStr, 11);
+  page.drawText(totalStr, { x: width - marginX - totalWidth, y, size: 11, font: fontBold, color: black });
+  y -= 26;
+
+  page.drawText('Documento gerado automaticamente pelo Biodron Smart Report. Valores sujeitos a confirmação.',
+    { x: marginX, y, size: 7, font, color: gray });
+
+  page.drawText('Laboratório BioDron · Soluções Tecnológicas', { x: marginX, y: 28, size: 7, font, color: gray });
+  const pagStr = `Página ${targetPageIndex + 1}`;
+  const pagWidth = font.widthOfTextAtSize(pagStr, 7);
+  page.drawText(pagStr, { x: width - marginX - pagWidth, y: 28, size: 7, font, color: gray });
+
+  const outBytes = await pdfDoc.save();
+  downloadBytes(outBytes, 'ordem_servico_editada.pdf');
+}
+
+function downloadBytes(bytes, filename){
+  const blob = new Blob([bytes], { type: 'application/pdf' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+</script>
+</body>
+</html>
