@@ -5,8 +5,8 @@
 <title>Editor de Laudo</title>
 <style>
   :root{
-    --navy:#072252;
-    --navy-dark:#000000;
+    --navy:#1a3c78;
+    --navy-dark:#132c59;
     --gray:#f4f5f7;
     --border:#dcdfe4;
     --text:#222;
@@ -20,12 +20,13 @@
   }
   .topbar{
     background:var(--navy);
-    padding:15px;
+    padding: 0px 25px;
     box-shadow:0 2px 10px rgba(0,0,0,.15);
   }
   .topbar h1{
     margin:0; color:#fff; text-transform:uppercase;
-    font-size:30px; font-weight:800; letter-spacing:0.5px;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size:45px; font-weight:800; letter-spacing:0.5px;
   }
   .page-wrap{ padding:40px 24px; }
   .container{
@@ -71,18 +72,26 @@
     padding:7px 14px; border-radius:5px; cursor:pointer; font-size:13px;
   }
   .add-btn:hover{background:var(--navy-dark);}
-  .subtotal-row td{font-weight:bold; background:#eef2f8; text-align:right;}
   #grandTotalBox{
     margin-top:20px; padding:14px 18px; background:var(--navy);
     color:#fff; border-radius:8px; display:flex; justify-content:space-between;
     align-items:center; font-size:16px; font-weight:bold;
   }
-  #generateBtn{
+  .primary-btn{
     margin-top:22px; background:#1a7d3e; color:#fff; border:none;
     padding:12px 22px; border-radius:6px; font-size:15px; cursor:pointer; width:100%;
   }
-  #generateBtn:disabled{background:#9aa; cursor:not-allowed;}
-  #generateBtn:hover:not(:disabled){background:#136030;}
+  .primary-btn:disabled{background:#9aa; cursor:not-allowed;}
+  .primary-btn:hover:not(:disabled){background:#136030;}
+  .secondary-btn{
+    margin-top:12px; background:var(--navy); color:#fff; border:none;
+    padding:11px 22px; border-radius:6px; font-size:14px; cursor:pointer; width:100%;
+  }
+  .secondary-btn:hover{background:var(--navy-dark);}
+  .link-btn{
+    margin-top:14px; background:none; border:none; color:var(--navy);
+    text-decoration:underline; cursor:pointer; font-size:13px; padding:0; display:block;
+  }
   .discount-box{
     margin-top:14px; padding:12px 14px; background:#f8f9fb;
     border:1px solid var(--border); border-radius:8px;
@@ -95,9 +104,33 @@
   .discount-summary{font-size:12px; color:#333; margin-left:auto;}
   .discount-summary strong{color:var(--navy-dark);}
   .thumb-box{display:flex; gap:16px; align-items:flex-start; margin-bottom:10px;}
-  #pageThumb{border:1px solid var(--border); max-width:160px; display:none;}
+  #pageThumb, #pageThumbInfo{border:1px solid var(--border); max-width:160px; display:none;}
   .hint{font-size:12px; color:#777; margin-top:4px;}
   .section-empty{font-size:12px; color:#999; font-style:italic; margin-top:6px;}
+
+  .view{display:none;}
+  .view.active{display:block;}
+
+  .choice-grid{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:20px;}
+  .choice-card{
+    border:2px solid var(--border); border-radius:10px; padding:20px;
+    text-align:left; background:#fbfbfc; cursor:pointer; transition:border-color .15s;
+  }
+  .choice-card:hover:not(:disabled){border-color:var(--navy);}
+  .choice-card:disabled{opacity:0.45; cursor:not-allowed;}
+  .choice-card .icon{font-size:26px; margin-bottom:8px; display:block;}
+  .choice-card .title{font-size:15px; font-weight:bold; color:var(--navy-dark); margin-bottom:4px;}
+  .choice-card .desc{font-size:12px; color:#666;}
+  #choiceSummary{font-size:13px; color:#333; background:#f4f6fa; border-radius:8px; padding:12px 14px; margin-top:6px;}
+  textarea#defeitoText{
+    width:100%; min-height:220px; font-family: Arial, Helvetica, sans-serif;
+    font-size:13px; padding:10px; border:1px solid var(--border); border-radius:6px;
+    resize:vertical; line-height:1.4;
+  }
+  .warn-box{
+    background:#fff8e6; border:1px solid #e8c766; border-radius:8px;
+    padding:10px 14px; font-size:12px; color:#7a5b00; margin-top:10px;
+  }
 </style>
 </head>
 <body>
@@ -106,15 +139,71 @@
 </header>
 <div class="page-wrap">
 <div class="container">
-  <h2 class="section-title">Editor de Orçamento</h2>
-  <p class="hint">Envie o PDF do laudo gerado pelo aplicativo da manutenção. O sistema localiza automaticamente a página "ORDEM DE SERVIÇO / ORÇAMENTO", deixa você editar os valores e peças/serviços, recalcula os totais, adiciona descontos e gera um novo PDF. As demais páginas do laudo permanecem exatamente iguais.</p>
+  <h2 class="section-title">Editor de Laudo</h2>
+  <p class="hint">Envie o PDF do laudo gerado pelo aplicativo da manutenção. O sistema localiza automaticamente as seções "INFORMAÇÕES GERAIS" e "ORDEM DE SERVIÇO / ORÇAMENTO", deixa você escolher o que editar, e gera um novo PDF com as alterações — o restante do documento permanece exatamente igual.</p>
 
-  <div class="upload-box">
-    <input type="file" id="fileInput" accept="application/pdf">
+  <!-- ===================== TELA 1: UPLOAD ===================== -->
+  <div id="uploadView" class="view active">
+    <div class="upload-box">
+      <input type="file" id="fileInput" accept="application/pdf">
+    </div>
+    <div id="status"></div>
   </div>
-  <div id="status"></div>
 
-  <div id="editorArea" style="display:none">
+  <!-- ===================== TELA 2: ESCOLHA ===================== -->
+  <div id="choiceView" class="view">
+    <div id="choiceSummary"></div>
+    <div class="choice-grid">
+      <button id="btnEditInfo" class="choice-card" type="button">
+        <span class="icon">📋</span>
+        <span class="title">Informações Gerais</span>
+        <span class="desc">Cliente, modelo, número de série e defeito alegado.</span>
+      </button>
+      <button id="btnEditOs" class="choice-card" type="button">
+        <span class="icon">🧾</span>
+        <span class="title">Ordem de Serviço / Orçamento</span>
+        <span class="desc">Serviços, peças, valores, descontos e totais.</span>
+      </button>
+    </div>
+    <button id="downloadBtn" class="primary-btn">Baixar PDF com as alterações</button>
+    <button id="newFileBtn" class="link-btn">Carregar outro PDF</button>
+  </div>
+
+  <!-- ===================== TELA 3: EDITOR INFORMAÇÕES GERAIS ===================== -->
+  <div id="infoEditorView" class="view">
+    <div class="thumb-box">
+      <div>
+        <div class="hint">Página identificada:</div>
+        <canvas id="pageThumbInfo"></canvas>
+      </div>
+      <div class="meta-grid" style="flex:1; grid-template-columns:1fr;">
+        <label>Cliente / Empresa
+          <input id="infoCliente">
+        </label>
+        <label>Variação / Especificação do Modelo
+          <input id="infoModelo">
+        </label>
+        <label>Número de Série (S/N)
+          <input id="infoSerie">
+        </label>
+      </div>
+    </div>
+    <label style="display:flex; flex-direction:column; font-size:12px; font-weight:bold; color:#444; gap:6px; margin-top:10px;">
+      Defeito Alegado pelo Cliente
+      <textarea id="defeitoText"></textarea>
+    </label>
+    <p class="hint">Cada linha do texto acima vira uma linha no PDF gerado (quebras automáticas são aplicadas dentro de cada linha se ela for muito longa).</p>
+    <div id="infoOverflowWarn" class="warn-box" style="display:none">
+      Este campo ocupa mais de uma página no laudo original. O sistema recria essa parte do documento
+      automaticamente ajustando o número de páginas conforme o texto — o restante do laudo (a partir de
+      "RESULTADOS DA INSPEÇÃO FÍSICA") é preservado exatamente como está, só que pode passar a começar em uma
+      página diferente da original.
+    </div>
+    <button id="saveInfoBtn" class="secondary-btn">Salvar e voltar</button>
+  </div>
+
+  <!-- ===================== TELA 4: EDITOR ORDEM DE SERVIÇO ===================== -->
+  <div id="osEditorView" class="view">
     <div class="thumb-box">
       <div>
         <div class="hint">Página identificada:</div>
@@ -181,9 +270,9 @@
       <span id="grandTotalValue">R$ 0,00</span>
     </div>
 
-    <button id="generateBtn">Gerar novo PDF com as alterações</button>
-    <p class="hint">O download começa automaticamente ao clicar. Nenhum dado é enviado para servidor, tudo acontece no seu navegador.</p>
+    <button id="saveOsBtn" class="secondary-btn">Salvar e voltar</button>
   </div>
+
 </div>
 </div>
 
@@ -192,20 +281,35 @@
 <script>
 pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 
+// ---------- Estado geral ----------
 let originalBytes = null;
 let totalPageCount = 0;
-let targetPageIndex = -1; // 0-based
+
+// OS/Orçamento
+let osPageIndex = -1;
+let osFound = false;
 let meta = { osNum:'', cliente:'', pagamento:'', categoria:'' };
 let rows = { servicos: [], pecas: [] };
-// type: 'valor' (R$ fixo) ou 'percent' (% sobre o subtotal da seção)
 let discounts = { servicos: { type:'valor', value:0 }, pecas: { type:'valor', value:0 } };
 
+// Informações Gerais
+let infoFound = false;
+let infoStartPage = -1;
+let infoEndPage = -1;
+let infoStopY = null;
+let infoHeaderY = null;
+let infoGerais = { titulo:'', ref:'', dataTec:'', cliente:'', modelo:'', serie:'', defeito:'' };
+
 const statusEl = document.getElementById('status');
-const editorArea = document.getElementById('editorArea');
 
 function setStatus(msg, cls){
   statusEl.textContent = msg;
   statusEl.className = cls || '';
+}
+
+function showView(id){
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
 }
 
 function parseBRL(str){
@@ -219,14 +323,20 @@ function formatBRL(n){
   return (n||0).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
 }
 
-// ---------- Reconstruir linhas de texto a partir dos itens do pdf.js ----------
-function buildLines(items){
-  const pts = items
+function escapeHtml(s){
+  return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ---------- Reconstrução de linhas a partir dos itens do pdf.js ----------
+function normalizeItems(items){
+  return items
     .filter(it => it.str !== undefined)
     .map(it => ({ str: it.str, x: it.transform[4], y: it.transform[5], width: it.width || 0 }));
+}
 
-  pts.sort((a,b) => (b.y - a.y) || (a.x - b.x));
-
+// Agrupa itens normalizados (x,y,str,width) em linhas visuais { text, y }.
+function clusterLines(normItems){
+  const pts = normItems.slice().sort((a,b) => (b.y - a.y) || (a.x - b.x));
   const clusters = [];
   let current = null;
   for(const p of pts){
@@ -239,8 +349,6 @@ function buildLines(items){
   }
   if(current) clusters.push(current);
 
-  // Retorna { text, y } por linha — a coordenada y é necessária para reagrupar
-  // descrições que quebram em múltiplas linhas (ver finalizeSection).
   return clusters.map(c => {
     c.items.sort((a,b) => a.x - b.x);
     let line = '';
@@ -256,6 +364,12 @@ function buildLines(items){
   }).filter(l => l.text.length > 0);
 }
 
+// Wrapper usado pelo parser da OS (compatibilidade com o código já existente,
+// que chama buildLines diretamente com os items brutos do pdf.js).
+function buildLines(items){
+  return clusterLines(normalizeItems(items));
+}
+
 // ---------- Parsing da página de OS/Orçamento ----------
 const reOs = /^OS\s*N[ºo°]?\s*:\s*(.+)$/i;
 const reCliente = /^Cliente:\s*(.+)$/i;
@@ -264,16 +378,8 @@ const reCategoria = /^Categoria:\s*(.+)$/i;
 const reHeaderServ = /^Serviços\s+Qtd\s+Valor\s+Unit\.?\s+Total$/i;
 const reHeaderPeca = /^Pe[çc]as\s+Qtd\s+Valor\s+Unit\.?\s+Total$/i;
 const reTotalGeral = /^TOTAL GERAL\s+R\$/i;
-// Uma linha "âncora" contém o final de uma linha de tabela: Qtd + R$ valor + R$ total.
-// A descrição antes desses números pode estar vazia (quando a descrição quebrou
-// em linhas anteriores/posteriores) ou conter parte/todo o texto.
 const reRowEnd = /^(.*?)\s*(\d+)\s+R\$\s*([\d.,]+)\s+R\$\s*([\d.,]+)\s*$/;
 
-// Agrupa as linhas de uma seção (Serviços ou Peças) em itens de tabela.
-// Quando a descrição de uma peça quebra em 2+ linhas, o pdf.js entrega essas
-// linhas separadas do valor numérico (que fica centralizado verticalmente na
-// célula). Por isso, cada linha sem números é atribuída à âncora (linha com
-// Qtd/Valor/Total) mais próxima em Y — e não simplesmente à linha seguinte/anterior.
 function finalizeSection(sectionLines){
   const anchors = [];
   sectionLines.forEach((ln, idx) => {
@@ -286,7 +392,7 @@ function finalizeSection(sectionLines){
 
   const buckets = anchors.map(a => ({ anchor: a, frags: [] }));
   sectionLines.forEach((ln, idx) => {
-    if(anchors.some(a => a.idx === idx)) return; // é a própria âncora, tratada à parte
+    if(anchors.some(a => a.idx === idx)) return;
     let best = 0, bestDist = Infinity;
     anchors.forEach((a, ai) => {
       const d = Math.abs(ln.y - a.y);
@@ -298,7 +404,7 @@ function finalizeSection(sectionLines){
   return buckets.map(b => {
     const parts = [...b.frags];
     if(b.anchor.descPart) parts.push({ y: b.anchor.y, text: b.anchor.descPart });
-    parts.sort((p1,p2) => p2.y - p1.y); // ordem visual: de cima para baixo
+    parts.sort((p1,p2) => p2.y - p1.y);
     return {
       desc: parts.map(p => p.text).join(' ').trim(),
       qtd: b.anchor.qtd,
@@ -338,53 +444,189 @@ function parseOsPage(lines){
   flush();
 }
 
+async function locateAndParseOs(pdf){
+  for(let i = pdf.numPages; i >= 1; i--){
+    const page = await pdf.getPage(i);
+    const textContent = await page.getTextContent();
+    const lines = buildLines(textContent.items);
+    if(lines.some(l => /ORDEM DE SERVI[ÇC]O/i.test(l.text))){
+      osPageIndex = i - 1;
+      parseOsPage(lines);
+      osFound = true;
+      return { pageIndex: osPageIndex, page };
+    }
+  }
+  osFound = false;
+  return null;
+}
+
+// ---------- Parsing da página de INFORMAÇÕES GERAIS (possivelmente multi-página) ----------
+const VALUE_ZONE_X = 180; // itens com x >= isso ficam na coluna de valor; abaixo, coluna de rótulo
+const INFO_SCAN_LIMIT = 15; // não escaneia além disso de páginas à procura do fim do bloco
+
+function orderKey(page, y){ return page * 100000 - y; }
+
+async function locateAndParseInfoGerais(pdf){
+  infoFound = false;
+  infoStartPage = -1;
+  infoEndPage = -1;
+  infoStopY = null;
+
+  const pagesNorm = []; // cache: pagesNorm[i] = itens normalizados da página i (0-based)
+  let startPage = -1;
+  let headerY = null;
+
+  // 1) localizar a página com "INFORMAÇÕES GERAIS"
+  for(let i = 1; i <= pdf.numPages; i++){
+    const page = await pdf.getPage(i);
+    const tc = await page.getTextContent();
+    const norm = normalizeItems(tc.items);
+    pagesNorm[i - 1] = norm;
+    const lines = clusterLines(norm);
+    const headerLine = lines.find(l => /INFORMA[ÇC][ÕO]ES GERAIS/i.test(l.text));
+    if(startPage === -1 && headerLine){
+      startPage = i - 1;
+      headerY = headerLine.y;
+    }
+  }
+  if(startPage === -1) return false;
+
+  // 2) extrair cabeçalho (título / ref / data-téc) e localizar limites (boundaries) dos campos na startPage
+  const startLines = clusterLines(pagesNorm[startPage]);
+  const startLabelLines = clusterLines(pagesNorm[startPage].filter(it => it.x < VALUE_ZONE_X));
+
+  const tituloLine = startLines.find(l => /^RELAT[ÓO]RIO DE INSPE[ÇC][ÃA]O$/i.test(l.text));
+  const refLine = startLines.find(l => /^Ref\.:\s*/i.test(l.text));
+  const dataTecLine = startLines.find(l => /^Data:.*T[ée]c\.:/i.test(l.text));
+
+  const clienteLabel = startLabelLines.find(l => /^Nome do Cliente/i.test(l.text));
+  const modeloLabel = startLabelLines.find(l => /^Varia[çc][ãa]o/i.test(l.text));
+  const serieLabel = startLabelLines.find(l => /^N[uú]mero de S[ée]rie/i.test(l.text));
+  const defeitoLabel = startLabelLines.find(l => /^Defeito Alegado/i.test(l.text));
+
+  if(!clienteLabel || !modeloLabel || !serieLabel || !defeitoLabel){
+    return false; // layout não reconhecido — não arrisca edição automática
+  }
+
+  // 3) procurar o marcador de parada a partir da startPage. Laudos completos trazem
+  // "RESULTADOS DA INSPEÇÃO FÍSICA"; laudos mais simples (ex.: só troca de uma peça)
+  // pulam direto para "EVIDÊNCIAS FOTOGRÁFICAS" — qualquer um dos dois serve de limite.
+  const reStopMarker = /^(RESULTADOS DA INSPE[ÇC][ÃA]O F[ÍI]SICA|EVID[ÊE]NCIAS FOTOGR[ÁA]FICAS)/i;
+  let endPage = -1, stopY = null;
+  for(let p = startPage; p < Math.min(pdf.numPages, startPage + INFO_SCAN_LIMIT); p++){
+    if(!pagesNorm[p]){
+      const page = await pdf.getPage(p + 1);
+      const tc = await page.getTextContent();
+      pagesNorm[p] = normalizeItems(tc.items);
+    }
+    const labelLines = clusterLines(pagesNorm[p].filter(it => it.x < VALUE_ZONE_X));
+    const stopLine = labelLines.find(l => reStopMarker.test(l.text));
+    if(stopLine){ endPage = p; stopY = stopLine.y; break; }
+  }
+  if(endPage === -1) return false; // não achou onde o bloco termina — não arrisca
+
+  // 4) montar lista combinada de linhas da coluna de VALOR entre startPage..endPage, em ordem de leitura
+  const reFooterPage = /^P[áa]gina\s+\d+$/i;
+  const allValueLines = [];
+  for(let p = startPage; p <= endPage; p++){
+    const valueLines = clusterLines(pagesNorm[p].filter(it => it.x >= VALUE_ZONE_X))
+      .filter(l => !reFooterPage.test(l.text));
+    valueLines.forEach(l => allValueLines.push({ page: p, y: l.y, text: l.text, key: orderKey(p, l.y) }));
+  }
+  allValueLines.sort((a,b) => a.key - b.key);
+
+  const boundaries = [
+    { field: 'cliente', key: orderKey(startPage, clienteLabel.y) },
+    { field: 'modelo',  key: orderKey(startPage, modeloLabel.y) },
+    { field: 'serie',   key: orderKey(startPage, serieLabel.y) },
+    { field: 'defeito', key: orderKey(startPage, defeitoLabel.y) },
+    { field: 'STOP',    key: orderKey(endPage, stopY) }
+  ];
+
+  const values = { cliente:[], modelo:[], serie:[], defeito:[] };
+  for(const vl of allValueLines){
+    for(let b = 0; b < boundaries.length - 1; b++){
+      if(vl.key >= boundaries[b].key && vl.key < boundaries[b + 1].key){
+        values[boundaries[b].field].push(vl.text);
+        break;
+      }
+    }
+  }
+
+  infoGerais = {
+    titulo: tituloLine ? tituloLine.text : 'RELATÓRIO DE INSPEÇÃO',
+    ref: refLine ? refLine.text : '',
+    dataTec: dataTecLine ? dataTecLine.text : '',
+    cliente: values.cliente.join(' ').trim(),
+    modelo: values.modelo.join(' ').trim(),
+    serie: values.serie.join(' ').trim(),
+    defeito: values.defeito.join('\n').trim()
+  };
+
+  infoStartPage = startPage;
+  infoEndPage = endPage;
+  infoStopY = stopY;
+  infoHeaderY = headerY;
+  infoFound = true;
+  return true;
+}
+
 // ---------- Carregar PDF ----------
 document.getElementById('fileInput').addEventListener('change', async (e) => {
   const file = e.target.files[0];
   if(!file) return;
-  editorArea.style.display = 'none';
   setStatus('Lendo o PDF...');
 
   try{
     const buf = await file.arrayBuffer();
     originalBytes = buf.slice(0);
 
-    const loadingTask = pdfjsLib.getDocument({ data: buf });
-    const pdf = await loadingTask.promise;
+    const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
     totalPageCount = pdf.numPages;
 
-    let found = false;
-    for(let i = pdf.numPages; i >= 1; i--){
-      const page = await pdf.getPage(i);
-      const textContent = await page.getTextContent();
-      const lines = buildLines(textContent.items);
-      const hasHeader = lines.some(l => /ORDEM DE SERVI[ÇC]O/i.test(l.text));
-      if(hasHeader){
-        targetPageIndex = i - 1;
-        parseOsPage(lines);
-        await renderThumb(page);
-        found = true;
-        break;
-      }
+    const osResult = await locateAndParseOs(pdf);
+    if(osResult) await renderThumb(osResult.page, 'pageThumb');
+
+    await locateAndParseInfoGerais(pdf);
+    if(infoFound){
+      const infoPage = await pdf.getPage(infoStartPage + 1);
+      await renderThumb(infoPage, 'pageThumbInfo');
     }
 
-    if(!found){
-      setStatus('Não encontrei uma página "ORDEM DE SERVIÇO / ORÇAMENTO" neste PDF. Verifique se é o laudo correto.', 'error');
+    if(!osFound && !infoFound){
+      setStatus('Não encontrei "INFORMAÇÕES GERAIS" nem "ORDEM DE SERVIÇO / ORÇAMENTO" neste PDF. Verifique se é o laudo correto.', 'error');
       return;
     }
 
-    populateForm();
-    editorArea.style.display = 'block';
-    setStatus(`Página ${targetPageIndex+1} de ${totalPageCount} identificada como Ordem de Serviço/Orçamento. Confira e edite abaixo.`, 'ok');
+    buildChoiceSummary();
+    document.getElementById('btnEditInfo').disabled = !infoFound;
+    document.getElementById('btnEditOs').disabled = !osFound;
+    showView('choiceView');
   } catch(err){
     console.error(err);
     setStatus('Erro ao processar o PDF: ' + err.message, 'error');
   }
 });
 
-async function renderThumb(page){
+function buildChoiceSummary(){
+  const parts = [];
+  if(infoFound){
+    const pages = infoEndPage - infoStartPage + 1;
+    parts.push(`✅ Informações Gerais encontradas (página ${infoStartPage+1}${pages>1 ? ' a ' + (infoEndPage+1) : ''} de ${totalPageCount}).`);
+  } else {
+    parts.push('⚠️ Não foi possível identificar automaticamente a seção Informações Gerais neste PDF.');
+  }
+  if(osFound){
+    parts.push(`✅ Ordem de Serviço / Orçamento encontrada (página ${osPageIndex+1} de ${totalPageCount}).`);
+  } else {
+    parts.push('⚠️ Não foi possível identificar automaticamente a Ordem de Serviço / Orçamento neste PDF.');
+  }
+  document.getElementById('choiceSummary').innerHTML = parts.join('<br>');
+}
+
+async function renderThumb(page, canvasId){
   const viewport = page.getViewport({ scale: 0.35 });
-  const canvas = document.getElementById('pageThumb');
+  const canvas = document.getElementById(canvasId);
   canvas.width = viewport.width;
   canvas.height = viewport.height;
   canvas.style.display = 'block';
@@ -392,16 +634,56 @@ async function renderThumb(page){
   await page.render({ canvasContext: ctx, viewport }).promise;
 }
 
-// ---------- Formulário ----------
-function populateForm(){
+document.getElementById('newFileBtn').addEventListener('click', () => {
+  document.getElementById('fileInput').value = '';
+  originalBytes = null;
+  setStatus('');
+  showView('uploadView');
+});
+
+// ---------- Navegação entre telas de edição ----------
+document.getElementById('btnEditInfo').addEventListener('click', () => {
+  populateInfoForm();
+  showView('infoEditorView');
+});
+document.getElementById('btnEditOs').addEventListener('click', () => {
+  populateOsForm();
+  showView('osEditorView');
+});
+document.getElementById('saveInfoBtn').addEventListener('click', () => {
+  infoGerais.cliente = document.getElementById('infoCliente').value.trim();
+  infoGerais.modelo = document.getElementById('infoModelo').value.trim();
+  infoGerais.serie = document.getElementById('infoSerie').value.trim();
+  infoGerais.defeito = document.getElementById('defeitoText').value;
+  showView('choiceView');
+});
+document.getElementById('saveOsBtn').addEventListener('click', () => {
+  meta.osNum = document.getElementById('osNum').value.trim();
+  meta.cliente = document.getElementById('cliente').value.trim();
+  meta.pagamento = document.getElementById('pagamento').value.trim();
+  meta.categoria = document.getElementById('categoria').value.trim();
+  showView('choiceView');
+});
+
+// ---------- Formulário: Informações Gerais ----------
+function populateInfoForm(){
+  document.getElementById('infoCliente').value = infoGerais.cliente;
+  document.getElementById('infoModelo').value = infoGerais.modelo;
+  document.getElementById('infoSerie').value = infoGerais.serie;
+  document.getElementById('defeitoText').value = infoGerais.defeito;
+  const spansMultiplePages = (infoEndPage - infoStartPage) > 0;
+  document.getElementById('infoOverflowWarn').style.display = spansMultiplePages ? 'block' : 'none';
+}
+
+// ---------- Formulário: OS/Orçamento ----------
+function populateOsForm(){
   document.getElementById('osNum').value = meta.osNum;
   document.getElementById('cliente').value = meta.cliente;
   document.getElementById('pagamento').value = meta.pagamento;
   document.getElementById('categoria').value = meta.categoria;
 
-  discounts = { servicos: { type:'valor', value:0 }, pecas: { type:'valor', value:0 } };
-  document.querySelectorAll('.discount-type').forEach(sel => sel.value = 'valor');
-  document.querySelectorAll('.discount-value').forEach(inp => inp.value = 0);
+  document.querySelectorAll('.discount-type').forEach(sel => sel.value = discounts[sel.dataset.section].type);
+  document.querySelectorAll('.discount-value').forEach(inp => inp.value = discounts[inp.dataset.section].value);
 
   renderTable('servicos');
   renderTable('pecas');
@@ -427,10 +709,6 @@ function renderTable(section){
     `;
     tbody.appendChild(tr);
   });
-}
-
-function escapeHtml(s){
-  return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 document.addEventListener('input', (e) => {
@@ -465,8 +743,6 @@ document.addEventListener('change', (e) => {
   }
 });
 
-// Atualiza só a célula de total da linha editada, sem recriar os inputs
-// (recriar a tabela a cada tecla digitada fazia o campo perder o foco).
 function updateRowTotal(section, idx){
   const tbody = document.querySelector(`#${section === 'servicos' ? 'servicosTable' : 'pecasTable'} tbody`);
   const tr = tbody.children[idx];
@@ -501,8 +777,6 @@ function sectionTotal(section){
   return rows[section].reduce((sum,r) => sum + (r.qtd||0)*(r.valorUnit||0), 0);
 }
 
-// Calcula subtotal, valor de desconto (convertendo % quando for o caso) e o
-// total já líquido da seção. O desconto nunca deixa o total da seção negativo.
 function computeSectionSummary(section){
   const subtotal = sectionTotal(section);
   const d = discounts[section];
@@ -526,9 +800,29 @@ function updateGrandTotal(){
   document.getElementById('grandTotalValue').textContent = 'R$ ' + formatBRL(total);
 }
 
-// ---------- Geração do novo PDF ----------
+// ---------- Utilidades de texto para geração do PDF ----------
+// A fonte padrão (WinAnsi/Latin-1) não consegue codificar vários símbolos que
+// aparecem em textos técnicos colados no laudo (Ω, ≤, ≥, travessões especiais,
+// aspas "inteligentes", reticências unicode etc.). Sem isso, pdf-lib lança uma
+// exceção e a geração do PDF quebra. Substituímos por equivalentes seguros e,
+// como rede de segurança final, qualquer caractere fora do Latin-1 vira "?".
+function sanitizeText(str){
+  if(!str) return str;
+  return str
+    .replace(/Ω/g, 'Ohm')
+    .replace(/µ/g, 'u')
+    .replace(/≤/g, '<=')
+    .replace(/≥/g, '>=')
+    .replace(/[–—]/g, '-')
+    .replace(/[""]/g, '"')
+    .replace(/['']/g, "'")
+    .replace(/…/g, '...')
+    .replace(/[^\x00-\xFF]/g, '?');
+}
+
 function wrapText(text, font, size, maxWidth){
-  const words = (text || '').split(' ');
+  const safeText = sanitizeText(text);
+  const words = (safeText || '').split(' ');
   const lines = [];
   let line = '';
   for(const w of words){
@@ -544,9 +838,11 @@ function wrapText(text, font, size, maxWidth){
   return lines.length ? lines : [''];
 }
 
-document.getElementById('generateBtn').addEventListener('click', async () => {
-  const btn = document.getElementById('generateBtn');
+// ---------- Geração do novo PDF ----------
+document.getElementById('downloadBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('downloadBtn');
   btn.disabled = true;
+  const originalLabel = btn.textContent;
   btn.textContent = 'Gerando...';
   try {
     await generatePdf();
@@ -555,26 +851,13 @@ document.getElementById('generateBtn').addEventListener('click', async () => {
     alert('Erro ao gerar o PDF: ' + err.message);
   } finally {
     btn.disabled = false;
-    btn.textContent = 'Gerar novo PDF com as alterações';
+    btn.textContent = originalLabel;
   }
 });
 
 async function generatePdf(){
   const { PDFDocument, StandardFonts, rgb } = PDFLib;
-
-  meta.osNum = document.getElementById('osNum').value.trim();
-  meta.cliente = document.getElementById('cliente').value.trim();
-  meta.pagamento = document.getElementById('pagamento').value.trim();
-  meta.categoria = document.getElementById('categoria').value.trim();
-
   const pdfDoc = await PDFDocument.load(originalBytes);
-  const pages = pdfDoc.getPages();
-  const oldPage = pages[targetPageIndex];
-  const { width, height } = oldPage.getSize();
-
-  pdfDoc.removePage(targetPageIndex);
-  const page = pdfDoc.insertPage(targetPageIndex, [width, height]);
-
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
@@ -583,16 +866,40 @@ async function generatePdf(){
   const black = rgb(0.13, 0.13, 0.13);
   const white = rgb(1,1,1);
   const gray = rgb(0.45, 0.45, 0.45);
+  const colors = { navy, lightGray, black, white, gray };
+
+  // IMPORTANTE: processar a OS (índice maior, normalmente a última página) ANTES do
+  // bloco de Informações Gerais (índices menores, no início do documento). Assim,
+  // se o bloco de Informações Gerais mudar a quantidade de páginas ao ser
+  // reconstruído, isso não invalida o índice já usado para a OS.
+  if(osFound){
+    regenerateOsPage(pdfDoc, font, fontBold, colors);
+  }
+  if(infoFound){
+    await regenerateInfoBlock(pdfDoc, font, fontBold, colors);
+  }
+
+  const outBytes = await pdfDoc.save();
+  downloadBytes(outBytes, 'laudo_editado.pdf');
+}
+
+// ---------- Regeneração da página de OS/Orçamento ----------
+function regenerateOsPage(pdfDoc, font, fontBold, colors){
+  const { navy, lightGray, black, white, gray } = colors;
+  const pages = pdfDoc.getPages();
+  const oldPage = pages[osPageIndex];
+  const { width, height } = oldPage.getSize();
+
+  pdfDoc.removePage(osPageIndex);
+  const page = pdfDoc.insertPage(osPageIndex, [width, height]);
 
   const marginX = 50;
   let y = height - 55;
 
-  // Título
   page.drawRectangle({ x:0, y: y-6, width: width, height: 28, color: navy });
   page.drawText('ORDEM DE SERVIÇO / ORÇAMENTO', { x: marginX, y: y+2, size: 13, font: fontBold, color: white });
   y -= 44;
 
-  // Meta info
   const metaLines = [];
   if(meta.osNum) metaLines.push(['OS Nº:', meta.osNum]);
   if(meta.cliente) metaLines.push(['Cliente:', meta.cliente]);
@@ -653,7 +960,6 @@ async function generatePdf(){
       alt = !alt;
     }
 
-    // Desconto da seção (se houver) e total líquido da seção
     const d = discounts[sectionKey];
     let discountAmount = d.type === 'percent' ? subtotal * ((d.value||0)/100) : (d.value||0);
     if(discountAmount < 0) discountAmount = 0;
@@ -693,12 +999,115 @@ async function generatePdf(){
     { x: marginX, y, size: 7, font, color: gray });
 
   page.drawText('Laboratório BioDron · Soluções Tecnológicas', { x: marginX, y: 28, size: 7, font, color: gray });
-  const pagStr = `Página ${targetPageIndex + 1}`;
-  const pagWidth = font.widthOfTextAtSize(pagStr, 7);
-  page.drawText(pagStr, { x: width - marginX - pagWidth, y: 28, size: 7, font, color: gray });
+}
 
-  const outBytes = await pdfDoc.save();
-  downloadBytes(outBytes, 'ordem_servico_editada.pdf');
+// ---------- Regeneração do bloco de Informações Gerais (1 ou mais páginas) ----------
+const STOP_PADDING = 22; // margem acima do marcador de parada, para preservar a barra colorida da seção seguinte
+
+async function regenerateInfoBlock(pdfDoc, font, fontBold, colors){
+  const { navy, lightGray, black, white, gray } = colors;
+
+  const origStartPage = pdfDoc.getPages()[infoStartPage];
+  const origEndPage = pdfDoc.getPages()[infoEndPage];
+  const { width, height } = origEndPage.getSize();
+
+  // Recorta e embute o CABEÇALHO original (logo + título + Ref/Data/Téc + linha
+  // divisória) — tudo acima de onde a barra "INFORMAÇÕES GERAIS" começava.
+  // Preserva a identidade visual da empresa em vez de redesenhar um substituto.
+  const headerCropBottom = infoHeaderY !== null ? infoHeaderY + 15 : height - 118;
+  const embeddedHeader = await pdfDoc.embedPage(origStartPage, { left:0, bottom: headerCropBottom, right: width, top: height });
+  const headerHeight = height - headerCropBottom;
+
+  // Recorta e embute a parte da última página original que fica A PARTIR do marcador
+  // de parada (ex.: "RESULTADOS DA INSPEÇÃO FÍSICA" em diante) — preservada tal como está.
+  const snippetTop = Math.min(height, infoStopY + STOP_PADDING);
+  const embeddedSnippet = snippetTop > 2 ? await pdfDoc.embedPage(origEndPage, { left:0, bottom:0, right:width, top:snippetTop }) : null;
+  const snippetHeight = embeddedSnippet ? snippetTop : 0;
+
+  const pagesToRemove = infoEndPage - infoStartPage + 1;
+  for(let i = 0; i < pagesToRemove; i++){ pdfDoc.removePage(infoStartPage); }
+
+  const marginX = 50;
+  const tableWidth = width - 2*marginX;
+  const colDesc = marginX + 4;
+  const bottomMargin = 45;
+
+  let insertAt = infoStartPage;
+  let page = pdfDoc.insertPage(insertAt, [width, height]);
+  insertAt++;
+  let y = height;
+
+  function newPage(){
+    page = pdfDoc.insertPage(insertAt, [width, height]);
+    insertAt++;
+    y = height - 55;
+  }
+
+  // Cabeçalho original preservado (logo, título, Ref/Data/Téc, linha divisória)
+  page.drawPage(embeddedHeader, { x:0, y: height - headerHeight, width, height: headerHeight });
+  y = height - headerHeight - 10;
+
+  // Barra da seção
+  page.drawRectangle({ x: marginX, y: y-16, width: tableWidth, height: 18, color: navy });
+  page.drawText('INFORMAÇÕES GERAIS', { x: colDesc, y: y-12, size: 10, font: fontBold, color: white });
+  y -= 26;
+
+  // Campos curtos
+  const labelColW = 165;
+  const shortFields = [
+    ['Nome do Cliente / Empresa', infoGerais.cliente],
+    ['Variação / Especificação do Modelo', infoGerais.modelo],
+    ['Número de Série (S/N)', infoGerais.serie]
+  ];
+  for(const [label, value] of shortFields){
+    const labelWrapped = wrapText(label, fontBold, 9, labelColW - 8);
+    const valueWrapped = wrapText(value || '', font, 9, tableWidth - labelColW - 16);
+    const rowH = Math.max(labelWrapped.length, valueWrapped.length) * 12 + 6;
+
+    if(y - rowH < bottomMargin) newPage();
+
+    labelWrapped.forEach((l,i) => page.drawText(l, { x: colDesc, y: y - 10 - i*12, size: 9, font: fontBold, color: black }));
+    valueWrapped.forEach((l,i) => page.drawText(l, { x: marginX + labelColW + 8, y: y - 10 - i*12, size: 9, font, color: black }));
+    y -= rowH;
+    page.drawLine({ start:{x:marginX,y}, end:{x:width-marginX,y}, thickness:0.5, color: rgbLite(colors) });
+    y -= 4;
+  }
+
+  // Campo Defeito Alegado (multi-linha, pode se estender por várias páginas)
+  if(y - 14 < bottomMargin) newPage();
+  page.drawText('Defeito Alegado pelo Cliente', { x: colDesc, y, size: 9, font: fontBold, color: black });
+  y -= 14;
+
+  const defeitoRawLines = (infoGerais.defeito || '').split('\n');
+  for(const rawLine of defeitoRawLines){
+    const wrapped = rawLine.trim() === '' ? [''] : wrapText(rawLine, font, 9, tableWidth - 8);
+    for(const wline of wrapped){
+      if(y - 12 < bottomMargin) newPage();
+      page.drawText(wline, { x: colDesc, y, size: 9, font, color: black });
+      y -= 12;
+    }
+  }
+
+  // Anexa o trecho preservado do original (RESULTADOS DA INSPEÇÃO FÍSICA em diante).
+  // Se não couber no espaço restante da página atual, começa uma nova página.
+  if(embeddedSnippet){
+    if(y - snippetHeight < 5){
+      newPage();
+      y = height;
+    }
+    const drawY = y - snippetHeight;
+    page.drawPage(embeddedSnippet, { x:0, y: drawY, width, height: snippetHeight });
+    // O recorte preservado carrega o rodapé original, incluindo "Página N" com a
+    // numeração antiga (que pode não bater mais após a edição). Cobrimos só essa
+    // parte com um retângulo branco, mantendo o restante do rodapé (nome do
+    // laboratório) visível.
+    page.drawRectangle({ x: width - marginX - 90, y: drawY + 15, width: 90, height: 16, color: white });
+  }
+}
+
+// pdf-lib rgb() já foi resolvido em 'colors'; esta função só devolve uma cor de linha discreta
+function rgbLite(colors){
+  return PDFLib.rgb(0.85, 0.86, 0.9);
 }
 
 function downloadBytes(bytes, filename){
