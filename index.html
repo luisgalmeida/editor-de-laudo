@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<title>Editor de Laudo</title>
+<title>Editor de Laudo — Biodron</title>
 <style>
   :root{
     --navy:#1a3c78;
@@ -20,13 +20,12 @@
   }
   .topbar{
     background:var(--navy);
-    padding: 0px 25px;
+    padding:22px 40px;
     box-shadow:0 2px 10px rgba(0,0,0,.15);
   }
   .topbar h1{
     margin:0; color:#fff; text-transform:uppercase;
-    font-family: Arial, Helvetica, sans-serif;
-    font-size:45px; font-weight:800; letter-spacing:0.5px;
+    font-size:30px; font-weight:800; letter-spacing:0.5px;
   }
   .page-wrap{ padding:40px 24px; }
   .container{
@@ -135,12 +134,12 @@
 </head>
 <body>
 <header class="topbar">
-  <h1>Editor de Laudo em PDF</h1>
+  <h1>Biodron - Editor de Laudo em PDF</h1>
 </header>
 <div class="page-wrap">
 <div class="container">
-  <h2 class="section-title">Editor de Laudo</h2>
-  <p class="hint">Envie o PDF do laudo gerado pelo aplicativo da manutenção. O sistema localiza automaticamente as seções "INFORMAÇÕES GERAIS" e "ORDEM DE SERVIÇO / ORÇAMENTO", deixa você escolher o que editar, e gera um novo PDF com as alterações — o restante do documento permanece exatamente igual.</p>
+  <h2 class="section-title">Editor de Laudo — Biodron</h2>
+  <p class="hint">Envie o PDF do laudo. O sistema localiza automaticamente as seções "INFORMAÇÕES GERAIS" e "ORDEM DE SERVIÇO / ORÇAMENTO", deixa você escolher o que editar, e gera um novo PDF com as alterações — o restante do documento permanece exatamente igual.</p>
 
   <!-- ===================== TELA 1: UPLOAD ===================== -->
   <div id="uploadView" class="view active">
@@ -329,9 +328,23 @@ function escapeHtml(s){
 
 // ---------- Reconstrução de linhas a partir dos itens do pdf.js ----------
 function normalizeItems(items){
-  return items
+  const norm = items
     .filter(it => it.str !== undefined)
     .map(it => ({ str: it.str, x: it.transform[4], y: it.transform[5], width: it.width || 0 }));
+
+  // Alguns PDFs gerados pelo sistema da Biodron emitem o mesmo texto duas vezes,
+  // na mesma posição, dentro do fluxo de conteúdo (aparenta ser um efeito colateral
+  // do gerador deles, semelhante a outras inconsistências já vistas nesses laudos).
+  // Sem essa filtragem, o texto duplicado apareceria repetido nos campos extraídos.
+  const seen = new Set();
+  const deduped = [];
+  for(const it of norm){
+    const key = it.str + '|' + it.x.toFixed(1) + '|' + it.y.toFixed(1);
+    if(seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(it);
+  }
+  return deduped;
 }
 
 // Agrupa itens normalizados (x,y,str,width) em linhas visuais { text, y }.
@@ -375,24 +388,64 @@ const reOs = /^OS\s*N[ºo°]?\s*:\s*(.+)$/i;
 const reCliente = /^Cliente:\s*(.+)$/i;
 const rePagamento = /^Pagamento:\s*(.+)$/i;
 const reCategoria = /^Categoria:\s*(.+)$/i;
-const reHeaderServ = /^Serviços\s+Qtd\s+Valor\s+Unit\.?\s+Total$/i;
-const reHeaderPeca = /^Pe[çc]as\s+Qtd\s+Valor\s+Unit\.?\s+Total$/i;
+// Em alguns laudos, o rótulo "Serviços"/"Peças" fica alguns pontos deslocado
+// verticalmente dos cabeçalhos de coluna (Qtd/Valor Unit./Total) — um pequeno
+// desalinhamento do próprio gerador do PDF. Por isso a detecção do cabeçalho da
+// seção usa só o rótulo em si, sem exigir que o resto da linha bata exatamente.
+const reHeaderServ = /^Servi[çc]os\b/i;
+const reHeaderPeca = /^Pe[çc]as\b/i;
+// Linha completa: descrição (opcional) + qtd + R$ valor + R$ total
+const reRowEndWithQty = /^(.*?)\s*(\d+)\s+R\$\s*([\d.,]+)\s+R\$\s*([\d.,]+)\s*$/;
+// Mesma coisa, mas sem a quantidade inline (quando ela cai numa linha própria,
+// por causa do mesmo tipo de desalinhamento do PDF de origem)
+const reRowEndNoQty = /^(.*?)\s*R\$\s*([\d.,]+)\s+R\$\s*([\d.,]+)\s*$/;
+const reStandaloneQty = /^(\d+)$/;
 const reTotalGeral = /^TOTAL GERAL\s+R\$/i;
-const reRowEnd = /^(.*?)\s*(\d+)\s+R\$\s*([\d.,]+)\s+R\$\s*([\d.,]+)\s*$/;
 
 function finalizeSection(sectionLines){
   const anchors = [];
   sectionLines.forEach((ln, idx) => {
-    const m = ln.text.match(reRowEnd);
-    if(m){
-      anchors.push({ idx, y: ln.y, descPart: m[1].trim(), qtd: parseFloat(m[2]) || 0, valorUnit: parseBRL(m[3]) });
+    const mQty = ln.text.match(reRowEndWithQty);
+    if(mQty){
+      anchors.push({ idx, y: ln.y, descPart: mQty[1].trim(), qtd: parseFloat(mQty[2]) || 0, valorUnit: parseBRL(mQty[3]), needsQty: false });
+      return;
+    }
+    // fallback: linha "R$ valor R$ total" sem quantidade — algo raro que acontece
+    // quando o PDF de origem imprime o número da quantidade numa linha própria,
+    // levemente deslocada verticalmente do resto da linha.
+    const mNoQty = ln.text.match(reRowEndNoQty);
+    if(mNoQty && !reStandaloneQty.test(ln.text)){
+      anchors.push({ idx, y: ln.y, descPart: mNoQty[1].trim(), qtd: null, valorUnit: parseBRL(mNoQty[2]), needsQty: true });
     }
   });
   if(anchors.length === 0) return [];
 
+  // Preenche a quantidade de âncoras "órfãs" usando a linha isolada de número
+  // mais próxima (ex.: uma linha contendo só "6"), antes de tratar o resto como
+  // fragmento de descrição.
+  const usedForQty = new Set();
+  anchors.forEach(a => {
+    if(!a.needsQty) return;
+    let best = -1, bestDist = Infinity;
+    sectionLines.forEach((ln, idx) => {
+      if(anchors.some(x => x.idx === idx)) return;
+      if(usedForQty.has(idx)) return;
+      if(!reStandaloneQty.test(ln.text)) return;
+      const d = Math.abs(ln.y - a.y);
+      if(d < bestDist){ bestDist = d; best = idx; }
+    });
+    if(best !== -1){
+      a.qtd = parseFloat(sectionLines[best].text) || 0;
+      usedForQty.add(best);
+    } else {
+      a.qtd = 1; // não achou a quantidade em lugar nenhum — assume 1 como último recurso
+    }
+  });
+
   const buckets = anchors.map(a => ({ anchor: a, frags: [] }));
   sectionLines.forEach((ln, idx) => {
     if(anchors.some(a => a.idx === idx)) return;
+    if(usedForQty.has(idx)) return;
     let best = 0, bestDist = Infinity;
     anchors.forEach((a, ai) => {
       const d = Math.abs(ln.y - a.y);
@@ -438,6 +491,8 @@ function parseOsPage(lines){
     if(reTotalGeral.test(line)){ flush(); currentSection = null; continue; }
     if(/^Documento gerado automaticamente/i.test(line)) continue;
     if(/^ORDEM DE SERVI/i.test(line)) continue;
+    if(/^(?:Qtd\s+)?Valor\s+Unit\.?(?:\s+Total)?$/i.test(line)) continue;
+    if(/^Qtd$/i.test(line)) continue;
 
     if(currentSection){ buffer.push(ln); }
   }
@@ -547,7 +602,13 @@ async function locateAndParseInfoGerais(pdf){
   for(const vl of allValueLines){
     for(let b = 0; b < boundaries.length - 1; b++){
       if(vl.key >= boundaries[b].key && vl.key < boundaries[b + 1].key){
-        values[boundaries[b].field].push(vl.text);
+        const arr = values[boundaries[b].field];
+        // Defesa extra: se a mesma linha de texto aparecer duas vezes seguidas
+        // (outro efeito colateral já observado no gerador de PDF da Biodron),
+        // ignora a repetição em vez de duplicar no campo editável.
+        if(arr.length === 0 || arr[arr.length - 1] !== vl.text){
+          arr.push(vl.text);
+        }
         break;
       }
     }
